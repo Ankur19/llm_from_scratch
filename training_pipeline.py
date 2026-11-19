@@ -3,7 +3,11 @@ Pretrain the LLM
 
 The most basic training pipeline possible.
 
-The model and the training data streams are abstracted out into separate files
+The model and the training data streams are abstracted out into separate files.
+
+Consider that the h5 files with tokens are already present (using tiktoken r50k_base)
+
+Inspired from github.com/FareedKhan-dev/train-llm-from-scratch
 """
 
 import os
@@ -95,4 +99,7 @@ def main() -> None:
 
     model = "<PLACEHOLDER>"
 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+    b_iterator = batch_iterator(train_path, batch_size, context_length, "cpu", seed)
 
