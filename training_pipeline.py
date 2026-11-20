@@ -14,6 +14,8 @@ import os
 import numpy as np
 import torch
 import h5py
+import tqdm
+import contextlib
 
 from collections.abc import Iterator
 
@@ -25,7 +27,7 @@ context_length = 128
 # --- Other
 train_path, eval_path = "data/train.h5", "data/eval.h5"
 batch_size = 8
-grad_accum_steps = 12
+grad_accum = 12
 train_steps = 50000
 eval_steps = 1000
 eval_iters = 100
@@ -89,17 +91,55 @@ def batch_iterator(data_path: str,
             yeild xb, yb
 
 
+@torch.no_grad()
+def estimate_loss(model, dev_path, steps) -> dict[str, float]
+
 
 def main() -> None:
     torch.manual_seed(seed)
     np.random.seed(seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cuda":
-        torch.cuda.reset_peak_memory_stats()
+    
+    # I have either cpu or xpu
+    device = "xpu" if torch.xpu.is_available() else "cpu"
+
+    # use bf16 for xpu else use float32 for Automatic Mixed Precision
+    amp_dtype = torch.bfloat16 if device == "xpu" else torch.float32
+
+    def autocast_ctx():
+        if device = "xpu":
+            return torch.autocast(device_type=device, dtype=amp_dtype)
+        return contextlib.nullcontext()
+
+    print("using device: ", device)
 
     model = "<PLACEHOLDER>"
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
     b_iterator = batch_iterator(train_path, batch_size, context_length, "cpu", seed)
+
+    losses: list[float] = []
+    start_step = 0
+
+    pbar = tqdm(range(start_step, train_steps))
+
+    for step in pbar:
+
+        try:
+
+            optimizer.zero_grad(set_to_none=True)
+            step_loss = 0.0
+            for _ in range(grad_accum):
+                xb, yb = next(b_iterator)
+                with autocast_ctx():
+                    _, loss = model(xb, yb)
+                    loss.backward()
+                    loss = loss/grad_accum
+                step_loss+=float(loss.item())
+
+            losses.append(step_loss)
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+
+            if step % eval_steps == 0:
 
