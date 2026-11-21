@@ -37,6 +37,7 @@ optimizer = "adamw"
 lr_schedule = "cosine"
 min_lr = 3e-05
 weight_decay = 0.1
+decay_step = 5000
 grad_clip = 1.0
 
 
@@ -92,7 +93,31 @@ def batch_iterator(data_path: str,
 
 
 @torch.no_grad()
-def estimate_loss(model, dev_path, steps) -> dict[str, float]
+def estimate_loss(model, device, steps) -> dict[str, float]:
+    out = {}
+    model.eval()
+
+    for p in [train_path, eval_path]:
+
+        b_iter = batch_iterator(p, batch_size, context_length, device, int(np.random.randint(0, 2**31-1)))
+
+        losses_eval = []
+
+        for _ in range(steps):
+
+            try:
+                xb, yb = next(b_iter)
+                _, loss = model(xb, yb)
+                losses_eval.append(float(loss.item()))
+            except StopIteration:
+                break
+        split = "train" if p==train_path else "eval"
+
+        out[split] = float(np.mean(losses_eval)) if losses_eval else float("nan")
+
+    model.train()
+    return out
+
 
 
 def main() -> None:
@@ -142,4 +167,9 @@ def main() -> None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
 
             if step % eval_steps == 0:
+                eval_losses = estimate_loss(model, device, eval_iters)
 
+                train_loss = eval_losses["train"]
+                eval_loss = eval_losses["eval"]
+
+                print(f"Step: {step}, Train loss: {train_loss}, Eval loss: {eval_loss}")
