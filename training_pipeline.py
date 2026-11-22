@@ -17,6 +17,7 @@ import h5py
 import tqdm
 import contextlib
 import tempfile
+import time
 
 from collections.abc import Iterator
 
