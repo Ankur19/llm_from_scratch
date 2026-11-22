@@ -16,6 +16,7 @@ import torch
 import h5py
 import tqdm
 import contextlib
+import tempfile
 
 from collections.abc import Iterator
 
@@ -26,6 +27,7 @@ vocab_size = 50304
 context_length = 128
 # --- Other
 train_path, eval_path = "data/train.h5", "data/eval.h5"
+model_out_path = "transformer_weights.pt"
 batch_size = 8
 grad_accum = 12
 train_steps = 50000
@@ -119,6 +121,35 @@ def estimate_loss(model, device, steps) -> dict[str, float]:
     return out
 
 
+def save_checkpoint(model, optimizer, device, step, train_loss, dev_loss, losses, save_path):
+
+    payload = {
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'losses': losses,
+            'train_loss': train_loss,
+            'dev_loss': dev_loss,
+            'step': step,
+            'device': device,
+            'pytorch_version': torch.__version__,
+            'current_lr': optimizer.param_groups[0]["lr"]
+            }
+
+    with tempfile.NamedTemporaryFile(
+            prefix=f".{os.path.basename(save_path)}.{int(time.time())}."
+            suffix=".tmp",
+            delete=False,
+            ) as tmp_file:
+        tmp_path = tmp_file.name
+
+        try:
+            torch.save(payload, tmp_path)
+            os.replace(tmp_path, save_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
+
 
 def main() -> None:
     torch.manual_seed(seed)
@@ -148,6 +179,8 @@ def main() -> None:
 
     pbar = tqdm(range(start_step, train_steps))
 
+    last_completed_step = 0
+
     for step in pbar:
 
         try:
@@ -173,3 +206,23 @@ def main() -> None:
                 eval_loss = eval_losses["eval"]
 
                 print(f"Step: {step}, Train loss: {train_loss}, Eval loss: {eval_loss}")
+
+            if step == decay_step:
+                for group in optimizer.param_groups:
+                    group["lr"] = min_lr
+
+            last_completed_step = step
+        
+        except StopIteration:
+            print("Training data iterator finished")
+            break
+
+    eval_loss = estimate_loss(model, device, 200)
+    train_loss = eval_loss["train"]
+    dev_loss = eval_loss["eval"]
+
+    save_checkpoint(model, optimizer, device, last_completed_step, train_loss, dev_loss, losses, model_out_path)
+
+
+if __name__=="__main__":
+    main()
