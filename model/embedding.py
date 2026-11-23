@@ -15,7 +15,7 @@ class Embedding(nn.Module):
 
     def forward(self, idx: torch.Tensor) -> torch.Tensor:
 
-        _, T = idx.size
+        _, T = idx.size()
 
         tok_embed = self.token_embedding(idx)
         pos_embed = self.position_embedding(self.pos_idxs[:T])
