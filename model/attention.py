@@ -14,7 +14,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
 
-        self.register_buffer('tril', torch.tril(torch.ones(context_size, context_size)), persistent=False)
+        self.register_buffer('tril', torch.tril(torch.ones(context_length, context_length)), persistent=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
 
@@ -37,19 +37,33 @@ class Head(nn.Module):
         return attn_weights @ v
 
 
+class MultiHeadAttention(nn.Module):
 
+    def __init__(self, n_embed: int, n_heads:int, context_length: int) -> None:
 
+        super().__init__()
 
+        self.heads = nn.ModuleList([Head(n_embed, n_embed // n_heads, context_length) for _ in range(n_heads)])
+        self.proj = nn.Linear(n_embed, n_embed)
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
 
+        x = torch.cat([h(x) for h in self.heads], dim=-1)
+        x = self.proj(x)
+        return x
 
+if __name__=="__main__":
+    batch_size = 2
+    context_length = 128
+    num_heads=4
+    embedding_dim = 32
 
+    input_tensor = torch.randn(batch_size, context_length, embedding_dim)
 
+    mha = MultiHeadAttention(embedding_dim, num_heads, context_length)
 
+    out = mha(input_tensor)
 
-
-
-
-
+    assert out.shape, (batch_size, context_length, embedding_dim)
 
 
