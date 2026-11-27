@@ -1,10 +1,10 @@
-import tensor
-import tensor.nn as nn
-import tensor.nn.functional as F
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-from models.mlp import MLP
-from models.attention import MultiHeadAttention
-from models.embedding import Embedding
+from model.mlp import MLP
+from model.attention import MultiHeadAttention
+from model.embedding import Embedding
 
 class Block(nn.Module):
 

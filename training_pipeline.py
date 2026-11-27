@@ -20,27 +20,31 @@ import tempfile
 import time
 
 from collections.abc import Iterator
+from model.transformer import Transformer
 
 
 # Variables necessary for running the training pipeline
 # --- From model
 vocab_size = 50304
 context_length = 128
+n_heads = 8
+n_embed = 128
+n_blocks = 1
 # --- Other
 train_path, eval_path = "data/train.h5", "data/eval.h5"
 model_out_path = "transformer_weights.pt"
 batch_size = 8
-grad_accum = 12
-train_steps = 50000
+grad_accum = 8
+train_steps = 20000
 eval_steps = 1000
 eval_iters = 100
 
-learning_rate = 0.0003
+learning_rate = 5e-4
 optimizer = "adamw"
 lr_schedule = "cosine"
-min_lr = 3e-05
+min_lr = 5e-05
 weight_decay = 0.1
-decay_step = 5000
+decay_step = 16000
 grad_clip = 1.0
 
 
@@ -50,7 +54,7 @@ def batch_iterator(data_path: str,
                    batch_size: int,
                    context_length: int,
                    device: str = "cpu",
-                   seed: int
+                   seed: int = 0
                    ) -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
     
     rng = np.random.default_rng(seed)
@@ -92,11 +96,11 @@ def batch_iterator(data_path: str,
 
             counter+=batch_size
 
-            yeild xb, yb
+            yield xb, yb
 
 
 @torch.no_grad()
-def estimate_loss(model, device, steps) -> dict[str, float]:
+def estimate_loss(model: Transformer, device: str, steps: int) -> dict[str, float]:
     out = {}
     model.eval()
 
@@ -137,7 +141,7 @@ def save_checkpoint(model, optimizer, device, step, train_loss, dev_loss, losses
             }
 
     with tempfile.NamedTemporaryFile(
-            prefix=f".{os.path.basename(save_path)}.{int(time.time())}."
+            prefix=f".{os.path.basename(save_path)}.{int(time.time())}.",
             suffix=".tmp",
             delete=False,
             ) as tmp_file:
@@ -163,13 +167,13 @@ def main() -> None:
     amp_dtype = torch.bfloat16 if device == "xpu" else torch.float32
 
     def autocast_ctx():
-        if device = "xpu":
+        if device == "xpu":
             return torch.autocast(device_type=device, dtype=amp_dtype)
         return contextlib.nullcontext()
 
     print("using device: ", device)
 
-    model = "<PLACEHOLDER>"
+    model = Transformer(n_embed, n_heads, context_length, vocab_size, n_blocks)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
