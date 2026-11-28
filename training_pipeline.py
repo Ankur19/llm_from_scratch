@@ -31,7 +31,7 @@ n_heads = 8
 n_embed = 128
 n_blocks = 1
 # --- Other
-train_path, eval_path = "data/train.h5", "data/eval.h5"
+train_path, eval_path = "pile_train.h5", "pile_dev.h5"
 model_out_path = "transformer_weights.pt"
 batch_size = 8
 grad_accum = 8
@@ -64,7 +64,7 @@ def batch_iterator(data_path: str,
         dataset = hdf5_file['tokens']
 
         # num tokens in dataset
-        length = dataset.size[0]
+        length = dataset.shape[0]
         
         # total possible sequences that can be made from the data
         possible_examples = (length-1)//context_length
@@ -83,7 +83,7 @@ def batch_iterator(data_path: str,
             if counter+batch_size > possible_examples and counter > 0:
                 rng.shuffle(example_idxs)
                 counter = 0
-                epochs +=1
+                epoch +=1
 
             
             # true indices for the start token of each batch
@@ -91,8 +91,8 @@ def batch_iterator(data_path: str,
 
             samples = torch.tensor(np.array([dataset[idx: idx+context_length+1] for idx in indices]))
 
-            xb = samples[:context_length].to(device)
-            yb = samples[1:context_length+1].to(device)
+            xb = samples[:, :context_length].to(device)
+            yb = samples[:, 1:context_length+1].to(device)
 
             counter+=batch_size
 
@@ -173,16 +173,16 @@ def main() -> None:
 
     print("using device: ", device)
 
-    model = Transformer(n_embed, n_heads, context_length, vocab_size, n_blocks)
+    model = Transformer(n_embed, n_heads, context_length, vocab_size, n_blocks).to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    b_iterator = batch_iterator(train_path, batch_size, context_length, "cpu", seed)
+    b_iterator = batch_iterator(train_path, batch_size, context_length, device, seed)
 
     losses: list[float] = []
     start_step = 0
 
-    pbar = tqdm(range(start_step, train_steps))
+    pbar = tqdm.tqdm(range(start_step, train_steps))
 
     last_completed_step = 0
 
@@ -196,13 +196,14 @@ def main() -> None:
                 xb, yb = next(b_iterator)
                 with autocast_ctx():
                     _, loss = model(xb, yb)
-                    loss.backward()
                     loss = loss/grad_accum
+                loss.backward()
                 step_loss+=float(loss.item())
 
             losses.append(step_loss)
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+            optimizer.step()
 
             if step % eval_steps == 0:
                 eval_losses = estimate_loss(model, device, eval_iters)
